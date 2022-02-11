@@ -1,0 +1,221 @@
+---
+title: "Homework 2 - Eric Connor"
+author: "Eric Connor"
+date: "2/9/2022"
+output: github_document
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(forcats)
+library(DataExplorer)
+library(stringr)
+library(gt)
+
+knitr::opts_knit$set(echo = TRUE,
+                     root.dir = rprojroot::find_rstudio_root_file())
+
+#Controlling figure output in markdown
+knitr::opts_chunk$set(
+#  fig.height =   
+  fig.width = 6,
+#  fig.asp = .5,
+  out.width = "90%",
+#  out.height = 
+ fig.align = "center",
+  cache = FALSE,
+  echo  = TRUE
+)
+
+theme_set(theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom"))
+
+options(scipen = 999)
+options(digits = 4)
+```
+
+# Problem 1. Github repository (10 points)
+
+The Github repository is named pubh7462_hw2_conno400, and is connected through an RProject. The /data folder is added to the .gitignore file. 
+
+# Problem 2. Best Practices and Consistent Style (20 points)
+
+# Problem 3. BRFSS SMART 2002-2010
+
+## 3.1. Data Exploration and Cleaning
+
+Import Dataset
+```{r}
+
+brfss <- read.csv(file = "brfss_smart_2010.csv")
+
+```
+
+Perform Exploratory Data Analysis through the DataExplorer package. There is a large amount of missing data and will need to be investigated while tidying up the data. 
+```{r, include = FALSE}
+
+introduce(brfss)
+plot_intro(brfss)
+plot_str(brfss)
+plot_missing(brfss)
+plot_bar(brfss)
+plot_histogram(brfss)
+
+```
+
+Tidying up the BRFSS 2002-2010 dataset. 
+```{r}
+
+brfss_tidy <- brfss %>%
+  filter(Topic == "Overall Health") %>%
+  mutate(State = Locationabbr,
+         County = str_sub(Locationdesc, 5),
+         State = factor(State),
+         Response = factor(Response),
+         County = factor(County)) %>%
+  select(Year, State, County, Response, Sample_Size, Data_value)
+
+head(brfss_tidy)
+
+```
+
+State, County, and Response option were all converted to categorical options because they are categorical variables. Although county and state have a large number of categories, it is still appropriate to convert to a factor instead of a string. Now, the BRFSS dataset just contains the variables of interest on the data that we are curious in investigating. 
+
+## 3.2. Data Description
+
+```{r}
+
+nrow(brfss_tidy)
+ncol(brfss_tidy)
+
+```
+
+The BRFSS dataset is now 10,625 by 6, with 10,625 cases and 6 variables. The 6 variables include: 
+
+- Year: The year the study value was collected in a particular state and county.
+- State: State of where the data value was collected in a particular state, county, and year.
+- County: County of where the data value was collected in a particular state, county, and year. 
+- Response: Response option in reply to the survey question "How is your general health?" 
+- Sample_Size: Sample Size for the amount of responses to the survey question among a certain state, county, and year.
+- Data_value: Prevalence estimate for each response to the survey question among a certain state, county, and year. 
+
+A case in the dataset is defined as a response option among a particular state, county, and year. 
+
+This dataset will need to be wrangled into proper format when completing a graph because states and counties are repeated for the amount of years and response options the survey question "How is your general health?"
+
+## 3.3 Do Data Science
+
+### 3.3.1. In the year 2004, which states were observed at 6 locations?
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, message = FALSE, results = TRUE, include = TRUE}
+
+brfss_tidy %>%
+  filter(Year == 2004) %>%
+  arrange(State) %>%
+  distinct(State, County) %>%
+  group_by(State) %>%
+  summarise(num_locations = n()) %>%
+  filter(num_locations == 6)
+
+```
+
+There were 8 states that were observed at 6 locations. These 8 states include:
+
+1. Colorado
+2. Connecticut
+3. Maryland
+4. New Mexico
+5. South Carolina
+6. Texas
+7. Utah
+8. Vermont
+
+### 3.3.2. Make a spaghetti plot that shows the number of observed locations in each state from 2002 to 2010. Which state has the highest mean number of locations over this period? 
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, message = FALSE, results = TRUE, include = TRUE}
+
+brfss_tidy %>%
+  arrange(State) %>%
+  group_by(State, Year) %>%
+  distinct(State, County) %>%
+  summarise(num_locations = n()) %>%
+  #mutate(State = fct_reorder(State, num_locations, mean)) %>%
+  ggplot(aes(x = Year, y = num_locations, color = fct_reorder(State, num_locations, mean))) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  xlab("Year") +
+  ylab("Number of Counties") +
+  scale_x_continuous(breaks = seq(2002, 2010, 1)) + 
+  scale_color_discrete(name = "State") + 
+  ggtitle("Number of Counties by Year, among each U.S. State") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.y = element_text(angle = 0, vjust = 0.5))
+  
+```
+
+The above displays a spaghetti plot with the number of observed locations in each of the 50 U.S. states and the District of Columbia. Overall New Jersey has the highest mean number of locations over this period. Despite it not having the highest number of any year, it does have the highest average number of locations for the BRFSS survey from 2002 to 2010.  
+
+### 3.3.3. Make a table showing, for the years 2002, 2006, 2010, the mean and standard deviation of sample size and proportion of Excellent, Good, and Poor responses across locations in MN.
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, message = FALSE, results = TRUE, include = TRUE}
+
+brfss_tidy %>%
+  filter(State == "MN" & Year %in% c(2002, 2006, 2010)) %>%
+  group_by(Response, Year) %>%
+  summarise(mean_ss = mean(Sample_Size),
+            sd_ss = sd(Sample_Size),
+            mean_prop = mean(Data_value),
+            sd_prop = sd(Data_value)) %>%
+  filter(Response %in% c("Excellent", "Good", "Poor")) %>%
+  gt() %>%
+  tab_spanner(label = "Sample Size",
+              columns = c("mean_ss", "sd_ss")) %>%
+  tab_spanner(label = "Proportion",
+              columns = c("mean_prop", "sd_prop")) %>%
+  cols_label(mean_ss = "Average",
+             sd_ss = "Std. Deviation",
+             mean_prop = "Average",
+             sd_prop = "Std. Deviation") %>%
+  tab_header("Sample Size and Standard Deviations of Excellent, Good, and Poor responses to survey question 'How is your general health?' in Minnesota") %>%
+  fmt_number(columns = c("mean_ss", "sd_ss"),
+             decimals = 0) %>%
+  fmt_number(columns = c("mean_prop"),
+             decimals = 2) %>%
+  fmt_number(columns = c("sd_prop"),
+             decimals = 1)
+
+```
+
+The above table displays the mean and standard deviations of sample size and the proportion or prevalence estimate to the survey question "How is your general health" among the category groups Excellent, Good, and Poor across the counties in Minnesota. Overall, the sample size has increased over the years, with 2010 seeing the largest sample size regardless of response in Minnesota. It also has the largest standard deviation. In addition, the amount of individuals indicating they have Excellent health was highest in 2010. Those indicating that they had good health was the largest in 2006 and the lowest in 2002. Then, the number of individuals indicating they had poor health was highest in 2002. Therefore, one could conclude that health tends to get better for individuals in Minnesota from BRFSS data from the years 2002 to 2010. 
+
+### 3.3.4. Create a ggplot that communicates the results/trends from the table above and stands on its own. 
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, message = FALSE, results = TRUE, include = TRUE}
+
+brfss_tidy %>%
+  filter(State == "MN" & Year %in% c(2002, 2006, 2010)) %>%
+  group_by(Response, Year) %>%
+  summarise(mean_ss = mean(Sample_Size),
+            sd_ss = sd(Sample_Size),
+            mean_prop = mean(Data_value),
+            sd_prop = sd(Data_value)) %>%
+  filter(Response %in% c("Excellent", "Good", "Poor")) %>%
+  pivot_longer(cols = c("mean_ss", "mean_prop"), names_to = "Measure_type", values_to = "Value") %>%
+  select(-c("sd_ss", "sd_prop")) %>%
+  mutate(Measure_type = fct_recode(Measure_type,
+                                   "Sample Size" = "mean_ss",
+                                   "Proportion" = "mean_prop")) %>%
+  ggplot(aes(x = Year, y = Value, color = Response)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ Measure_type, scales = "free") +
+  ggtitle("Mean Proportion and Sample Size for \nsurvey question 'How is your general health'\n response from 2002 and 2010 in Minnesota counties") + 
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.y = element_text(angle = 0, vjust = 0.5))
+
+```
+
+The above plot demonstrates the average proportion and average sample size for the response groups of Excellent, Good, and Poor to the survey question "How is your general health?" from Minnesota counties between the years 2002 and 2010. Overall, you can tell that the sample size increases among each of the response groups, possibly indicating that more individuals are completing the BRFSS survey compared to previous years. In addition, it could just mean that individuals responding to the survey are just more likely to respond Excellent, Good, or Poor compared to Very Good or Fair. 
+
+Also, there has been a greater proportion of people indicating that they have Excellent or Good health compared to those with Poor health in Minnesota counties. Excellent and Good tend to have a large proportion of responses for the survey question in comparison to other groups. This is great news for Minnesota counties since most of these respondents, which are weighted prevalence estimates, tend to have be pleased with their general health status and have Excellent or Good health. Few Minnesotans have Poorer health. These results are consistent between 2002 and 2010. 
